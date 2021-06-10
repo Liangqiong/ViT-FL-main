@@ -1,2 +1,2 @@
-# ViT-FL-main
-# Coming soon
+# Vision Transformer in Federated Learning
+## Coming soon
