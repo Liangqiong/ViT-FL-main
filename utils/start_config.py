@@ -50,7 +50,7 @@ def initization_configure(args):
         torch.cuda.manual_seed(args.seed)
 
     # Set model type related parameters
-    if args.FL_platform == "CWT-ResNet" or args.FL_platform == 'FedAVG-ResNet':
+    if args.FL_platform == "ResNet-CWT" or args.FL_platform == 'ResNet-FedAVG':
         args.Use_ResNet = True
     else:
         args.Use_ResNet = False
