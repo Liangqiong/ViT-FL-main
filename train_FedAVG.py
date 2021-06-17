@@ -156,7 +156,7 @@ def main():
     parser = argparse.ArgumentParser()
     # General DL parameters
     parser.add_argument("--net_name", type = str, default="ValTest_V1",  help="Basic Name of this run. ")
-    parser.add_argument("--FL_platform", type = str, default="FedAVG-ViT", choices=[ "FedAVG-ResNet", "FedAVG-ViT"],  help="Choose of different FL platform. ")
+    parser.add_argument("--FL_platform", type = str, default="ViT-FedAVG", choices=[ "ResNetFedAVG", "ViT-FedAVG"],  help="Choose of different FL platform. ")
     parser.add_argument("--dataset", choices=["cifar10", "Retina" ,"CelebA"], default="CelebA", help="Which dataset.")
     parser.add_argument("--data_path", type=str, default='./data/', help="Where is dataset located.")
 
