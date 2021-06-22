@@ -67,6 +67,18 @@ python train_FedAVG.py --FL_platform ViT-FedAVG --dataset CelebA --E_epoch 1 --m
 
 - Also refer to the ```train_CWT.py``` and ```train_FedAVG.py``` for more tags
 
+
+## Citations
+
+```bibtex
+@article{qu2021rethinking,
+  title={Rethinking Architecture Design for Tackling Data Heterogeneity in Federated Learning},
+  author={Qu, Liangqiong and Zhou, Yuyin and Liang, Paul Pu and Xia, Yingda and Wang, Feifei and Fei-Fei, Li and Adeli, Ehsan and Rubin, Daniel},
+  journal={arXiv preprint arXiv:2106.06047},
+  year={2021}
+}
+```
+
 ## Acknowledgments
 - Our ViT implementation is based on [Pytorch ViT implementation](https://github.com/jeonsworld/ViT-pytorch)
 - Original ViT implementation at [Google ViT](https://github.com/google-research/vision_transformer)
