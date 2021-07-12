@@ -62,11 +62,9 @@ def initization_configure(args):
 
 
     # Prepare model
-    config = CONFIGS[args.model_type]
-
 
     if not args.Use_ResNet:
-        model = VisionTransformer(config, args.img_size, zero_head=True, num_classes=args.num_classes)
+        model = VisionTransformer(CONFIGS[args.model_type], args.img_size, zero_head=True, num_classes=args.num_classes)
         model.load_from(np.load(args.pretrained_dir))
         model.to(args.device)
 
