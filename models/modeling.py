@@ -19,8 +19,6 @@ from scipy import ndimage
 
 import models.configs as configs
 
-from .modeling_resnet import ResNetV2
-
 
 logger = logging.getLogger(__name__)
 
