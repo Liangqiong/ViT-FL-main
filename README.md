@@ -26,9 +26,9 @@ We provide the data partitions for Cifar-10 and CelebA datasets
 - Retina dataset (Coming soon)
 
 ### 2. Download the Pretrained Models
-- We use imagenet21k pre-train in our paper, download model and put it at ```--pretrained_dir``` folder
+- We use imagenet21k pre-train in our paper, download model from the following link and put it at ```--pretrained_dir``` folder
 
-` wget https://storage.googleapis.com/vit_models/imagenet21k/{MODEL_NAME}.npz`
+https://console.cloud.google.com/storage/browser/vit_models;tab=objects?prefix=&forceOnObjectsSortingFiltering=false
 
 
 ### 3. Train Model (refer to additional notes for usage of more tags)
