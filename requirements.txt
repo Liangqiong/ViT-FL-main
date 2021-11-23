@@ -1,5 +1,6 @@
 torch
 numpy
+tqdm
 tensorboard
-Pillow
-pandas
+ml-collections
+timm
