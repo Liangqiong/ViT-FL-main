@@ -70,7 +70,6 @@ def setup_scheduler(args, optimizer, t_total=None):
         scheduler = WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
     elif args.decay_type == 'step':
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=0.5)
-
     else:
         sys.exit("Not implemented learning rate scheduler, code exit, re-run to use correct sheduler")
     return scheduler

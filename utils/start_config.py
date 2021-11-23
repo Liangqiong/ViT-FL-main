@@ -1,13 +1,15 @@
 import os
+import sys
 import random
 import numpy as np
 
 import torch
 import torch.nn as nn
 import torchvision.models as torch_models
-
-from models.modeling import VisionTransformer, CONFIGS
-
+from efficientnet_pytorch import EfficientNet
+from models import build_model
+from torch.nn import Linear
+from utils.config_swin import get_config
 
 def print_options(args, model):
     message = ''
@@ -36,8 +38,9 @@ def print_options(args, model):
     print(message)
 
 
-def initization_configure(args):
+def initization_configure(args, vis= False):
     args.device = torch.device("cuda:{gpu_id}".format(gpu_id = args.gpu_ids) if torch.cuda.is_available() else "cpu")
+    # args.device = torch.device("cpu")
 
 
     # Set seed
@@ -49,42 +52,88 @@ def initization_configure(args):
     if not args.device == 'cpu':
         torch.cuda.manual_seed(args.seed)
 
-    # Set model type related parameters
-    if "ResNet" in args.FL_platform:
-        args.Use_ResNet = True
-    else:
-        args.Use_ResNet = False
-
     if args.dataset == 'cifar10':
         args.num_classes = 10
     else:
         args.num_classes = 2
 
+    # Set model type related parameters
+    if "ResNet" in args.FL_platform:
+        args.Use_ResNet = True
+        if '101' in args.net_name:
+            model = torch_models.resnet152(pretrained=args.Pretrained)
+            # model.fc = nn.Linear(2048, args.num_classes)
+            print('We use ResNet 152')
 
-    # Prepare model
+        elif '32_8' in args.net_name:
 
-    if not args.Use_ResNet:
-        model = VisionTransformer(CONFIGS[args.model_type], args.img_size, zero_head=True, num_classes=args.num_classes)
-        model.load_from(np.load(args.pretrained_dir))
+            model = torch_models.resnext101_32x8d(pretrained=args.Pretrained)
+            print('We use ResNet 101-32*8d')
+
+        else:
+            model = torch_models.resnet50(pretrained=args.Pretrained)
+            print('We use default ResNet 50')
+        model.fc = nn.Linear(model.fc.weight.shape[1], args.num_classes)
         model.to(args.device)
 
-    else:
 
-        model = torch_models.resnet50(pretrained=True)
-        model.fc = nn.Linear(2048, args.num_classes)
+    elif "Efficient" in args.FL_platform:
+        args.Use_ResNet = True
+
+        try:
+            model = EfficientNet.from_pretrained(args.net_name)
+            print('We use EfficientNet with model architecture', args.net_name)
+        except:
+            print('Not implemented Efficient architecture, we use default Efficient-b5')
+            model = EfficientNet.from_pretrained('efficientnet-b5')
+
+        model._fc = nn.Linear(model._fc.weight.shape[1], args.num_classes)
         model.to(args.device)
 
+    elif "ViT" in args.FL_platform:
+        if 'tiny' in args.net_name:
+            print('We use ViT tiny')
+            from timm.models.vision_transformer import vit_tiny_patch16_224
+            model = vit_tiny_patch16_224(pretrained=args.Pretrained)
+        elif 'small' in args.net_name:
+            print('We use ViT small')
+            from timm.models.vision_transformer import vit_small_patch16_224
+            model = vit_small_patch16_224(pretrained=args.Pretrained)
+        else:
+            from timm.models.vision_transformer import vit_base_patch16_224
+            print('We use default ViT settting base')
+            model = vit_base_patch16_224(pretrained=args.Pretrained)
 
+        model.head = Linear(model.head.weight.shape[1], args.num_classes)
+        model.to(args.device)
+
+        # we test with timm
+
+
+    elif "Swin" in args.FL_platform:
+        print('We use Swin')
+        if not args.cfg:
+            sys.exit('Network configure file cfg for Swin is missing, code is exit')
+        swin_args = get_config(args)
+        model = build_model(args, swin_args)
+        if args.Pretrained:
+            checkpoint = torch.load(args.pretrained_dir, map_location='cpu')
+            model.load_state_dict(checkpoint['model'], strict=False)
+
+        model.head = Linear(model.head.weight.shape[1], args.num_classes)
+        model.to(args.device)
 
     # set output parameters
-    args.name = args.net_name + '_' + args.split_type + '_lr_' + args.decay_type + '_' + str(args.learning_rate) + \
-                '_WUP_'  + str(args.warmup_steps) + '_Round_' + str(args.max_communication_rounds) + '_Eepochs_' + str(args.E_epoch) + '_Seed_' + str(args.seed)
+    print(args.optimizer_type)
+    args.name = args.net_name + '_' + args.split_type + '_lr_' + str(args.learning_rate) + '_Pretrained_' \
+                + str(args.Pretrained) + "_optimizer_" + str(args.optimizer_type) +  '_WUP_'  + str(args.warmup_steps) \
+                + '_Round_' + str(args.max_communication_rounds) + '_Eepochs_' + str(args.E_epoch) + '_Seed_' + str(args.seed)
+
+
     args.output_dir = os.path.join('output', args.FL_platform, args.dataset, args.name)
     os.makedirs(args.output_dir, exist_ok=True)
 
     print_options(args, model)
-
-
 
     # set train val related paramteres
     args.best_acc = {}

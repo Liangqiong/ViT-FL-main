@@ -1,11 +1,71 @@
 from __future__ import absolute_import, division, print_function
 import os
+import math
 import numpy as np
 from copy import deepcopy
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+
 
 import torch
 
 from utils.scheduler import setup_scheduler
+
+
+## for optimizaer
+
+from torch import optim as optim
+
+
+def build_optimizer(config, model):
+    """
+    Build optimizer, set weight decay of normalization to 0 by default.
+    """
+    skip = {}
+    skip_keywords = {}
+    if hasattr(model, 'no_weight_decay'):
+        skip = model.no_weight_decay()
+    if hasattr(model, 'no_weight_decay_keywords'):
+        skip_keywords = model.no_weight_decay_keywords()
+    parameters = set_weight_decay(model, skip, skip_keywords)
+
+    opt_lower = config.TRAIN.OPTIMIZER.NAME.lower()
+    optimizer = None
+    if opt_lower == 'sgd':
+        optimizer = optim.SGD(parameters, momentum=config.TRAIN.OPTIMIZER.MOMENTUM, nesterov=True,
+                              lr=config.TRAIN.BASE_LR, weight_decay=config.TRAIN.WEIGHT_DECAY)
+    elif opt_lower == 'adamw':
+        optimizer = optim.AdamW(parameters, eps=config.TRAIN.OPTIMIZER.EPS, betas=config.TRAIN.OPTIMIZER.BETAS,
+                                lr=config.TRAIN.BASE_LR, weight_decay=config.TRAIN.WEIGHT_DECAY)
+
+    return optimizer
+
+
+def set_weight_decay(model, skip_list=(), skip_keywords=()):
+    has_decay = []
+    no_decay = []
+
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue  # frozen weights
+        if len(param.shape) == 1 or name.endswith(".bias") or (name in skip_list) or \
+                check_keywords_in_name(name, skip_keywords):
+            no_decay.append(param)
+            # print(f"{name} has no weight decay")
+        else:
+            has_decay.append(param)
+    return [{'params': has_decay},
+            {'params': no_decay, 'weight_decay': 0.}]
+
+
+def check_keywords_in_name(name, keywords=()):
+    isin = False
+    for keyword in keywords:
+        if keyword in name:
+            isin = True
+    return isin
+
+
+
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -51,10 +111,7 @@ def inner_valid(args, model, test_loader):
         batch = tuple(t.to(args.device) for t in batch)
         x, y = batch
         with torch.no_grad():
-            if not args.Use_ResNet:
-                logits = model(x)[0]
-            else:
-                logits = model(x)
+            logits = model(x)
 
             if args.num_classes > 1:
                 eval_loss = loss_fct(logits, y)
@@ -77,16 +134,34 @@ def inner_valid(args, model, test_loader):
                 all_label[0], y.detach().cpu().numpy(), axis=0
             )
     all_preds, all_label = all_preds[0], all_label[0]
-    eval_result = simple_accuracy(all_preds, all_label)
+    if not args.num_classes == 1:
+        eval_result = simple_accuracy(all_preds, all_label)
+    else:
+        # eval_result =  mean_absolute_error(all_preds, all_label)
+        eval_result =  mean_squared_error(all_preds, all_label)
+
     model.train()
 
     return eval_result, eval_losses
+
+def metric_evaluation(args, eval_result):
+    if args.num_classes == 1:
+        if args.best_acc[args.single_client] < eval_result:
+            Flag = False
+        else:
+            Flag = True
+    else:
+        if args.best_acc[args.single_client] < eval_result:
+            Flag = True
+        else:
+            Flag = False
+    return Flag
 
 def valid(args, model, val_loader,  test_loader = None, TestFlag = False):
     # Validation!
     eval_result, eval_losses = inner_valid(args, model, val_loader)
 
-    print("Valid Loss: %2.5f" % eval_losses.avg, "Valid Accuracy: %2.5f" % eval_result)
+    print("Valid Loss: %2.5f" % eval_losses.avg, "Valid metric: %2.5f" % eval_result)
     if args.dataset == 'CelebA':
         if args.best_eval_loss[args.single_client] > eval_losses.val:
             # if args.best_acc[args.single_client] < eval_result:
@@ -95,7 +170,7 @@ def valid(args, model, val_loader,  test_loader = None, TestFlag = False):
 
             args.best_acc[args.single_client] = eval_result
             args.best_eval_loss[args.single_client] = eval_losses.val
-            print("The updated best acc of client", args.single_client, args.best_acc[args.single_client])
+            print("The updated best metric of client", args.single_client, args.best_acc[args.single_client])
 
             if TestFlag:
                 test_result, eval_losses = inner_valid(args, model, test_loader)
@@ -103,15 +178,16 @@ def valid(args, model, val_loader,  test_loader = None, TestFlag = False):
                 print('We also update the test acc of client', args.single_client, 'as',
                       args.current_test_acc[args.single_client])
         else:
-            print("Donot replace previous best acc of client", args.best_acc[args.single_client])
-    else: # we use different metrics
-        if args.best_acc[args.single_client] < eval_result:
+            print("Donot replace previous best metric of client", args.best_acc[args.single_client])
+    else:  # we use different metrics
+        # if args.best_acc[args.single_client] < eval_result:
+        if metric_evaluation(args, eval_result):
             if args.save_model_flag:
                 save_model(args, model)
 
             args.best_acc[args.single_client] = eval_result
             args.best_eval_loss[args.single_client] = eval_losses.val
-            print("The updated best acc of client", args.single_client, args.best_acc[args.single_client])
+            print("The updated best metric of client", args.single_client, args.best_acc[args.single_client])
 
             if TestFlag:
                 test_result, eval_losses = inner_valid(args, model, test_loader)
@@ -119,10 +195,24 @@ def valid(args, model, val_loader,  test_loader = None, TestFlag = False):
                 print('We also update the test acc of client', args.single_client, 'as',
                       args.current_test_acc[args.single_client])
         else:
-            print("Donot replace previous best acc of client", args.best_acc[args.single_client])
+            print("Donot replace previous best metric of client", args.best_acc[args.single_client])
 
     args.current_acc[args.single_client] = eval_result
 
+
+def optimization_fun(args, model):
+
+    # Prepare optimizer, scheduler
+    if args.optimizer_type == 'sgd':
+        optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate, momentum=0.9, weight_decay=args.weight_decay)
+    elif args.optimizer_type == 'adamw':
+        optimizer = torch.optim.AdamW(model.parameters(), eps=1e-8, betas=(0.9, 0.999), lr=args.learning_rate, weight_decay=0.05)
+
+    else:
+        optimizer = torch.optim.AdamW(model.parameters(), eps=1e-8, betas=(0.9, 0.999), lr=args.learning_rate, weight_decay=0.05)
+
+        print("===============Not implemented optimization type, we used default adamw optimizer ===============")
+    return optimizer
 
 
 def Partial_Client_Selection(args, model):
@@ -143,15 +233,15 @@ def Partial_Client_Selection(args, model):
 
     for proxy_single_client in args.proxy_clients:
         model_all[proxy_single_client] = deepcopy(model).cpu()
-        optimizer_all[proxy_single_client] = torch.optim.SGD(model_all[proxy_single_client].parameters(), lr=args.learning_rate, momentum=0.9, weight_decay=args.weight_decay)
+        optimizer_all[proxy_single_client] = optimization_fun(args, model_all[proxy_single_client])
 
         # get the total decay steps first
         if not args.dataset == 'CelebA':
-            args.t_total[proxy_single_client] = args.clients_with_len[proxy_single_client] *  args.num_steps / args.batch_size * args.E_epoch
+            args.t_total[proxy_single_client] = args.clients_with_len[proxy_single_client] *  args.max_communication_rounds / args.batch_size * args.E_epoch
         else:
-            # just approximate to make sure average communication round for each client is args.num_steps
-            args.t_total[proxy_single_client] = sum(args.clients_with_len.values()) / (args.num_local_clients-1) *  \
-                                                args.num_steps / args.batch_size * args.E_epoch
+            # just approximate to make sure average communication round for each client is args.max_communication_rounds
+            tmp_rounds = [math.ceil(len/32) for len in args.clients_with_len.values()]
+            args.t_total[proxy_single_client]= sum(tmp_rounds)/(args.num_local_clients-1) *  args.max_communication_rounds
         scheduler_all[proxy_single_client] = setup_scheduler(args, optimizer_all[proxy_single_client], t_total=args.t_total[proxy_single_client])
         args.learning_rate_record[proxy_single_client] = []
 
