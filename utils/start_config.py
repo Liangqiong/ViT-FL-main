@@ -130,7 +130,8 @@ def initization_configure(args, vis= False):
                 + '_Round_' + str(args.max_communication_rounds) + '_Eepochs_' + str(args.E_epoch) + '_Seed_' + str(args.seed)
 
 
-    args.output_dir = os.path.join('output', args.FL_platform, args.dataset, args.name)
+    # args.output_dir = os.path.join('output', args.FL_platform, args.dataset, args.name)
+    args.output_dir = os.path.join(args.output_dir, args.FL_platform, args.dataset, args.name)
     os.makedirs(args.output_dir, exist_ok=True)
 
     print_options(args, model)
